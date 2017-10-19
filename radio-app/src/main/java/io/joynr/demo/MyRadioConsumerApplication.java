@@ -21,14 +21,6 @@ package io.joynr.demo;
 import java.io.IOException;
 import java.util.Properties;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.ParseException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +50,7 @@ import io.joynr.runtime.JoynrApplication;
 import io.joynr.runtime.JoynrApplicationModule;
 import io.joynr.runtime.JoynrInjectorFactory;
 import io.joynr.runtime.LibjoynrWebSocketRuntimeModule;
-import jline.console.ConsoleReader;
+import java.util.logging.Level;
 import joynr.MulticastSubscriptionQos;
 import joynr.OnChangeSubscriptionQos;
 import joynr.OnChangeWithKeepAliveSubscriptionQos;
@@ -102,70 +94,19 @@ public class MyRadioConsumerApplication extends AbstractJoynrApplication {
      * @param args arguments give when calling the main method
      */
     public static void main(String[] args) {
-        // run application from cmd line using Maven:
-        // mvn exec:java -Dexec.mainClass="io.joynr.demo.MyRadioConsumerApplication" -Dexec.args="<arguments>"
         DiscoveryScope tmpDiscoveryScope = DiscoveryScope.LOCAL_AND_GLOBAL;
         String host = "localhost";
         int port = 4242;
-        String providerDomain = "domain";
-        String transport = null;
-
-        CommandLine line;
-        Options options = new Options();
-        Options helpOptions = new Options();
-        setupOptions(options, helpOptions);
-        CommandLineParser parser = new DefaultParser();
-
-        // check for '-h' option alone first. This is required in order to avoid
-        // reports about missing other args when using only '-h', which should supported
-        // to just get help / usage info.
-        try {
-            line = parser.parse(helpOptions, args);
-
-            if (line.hasOption('h')) {
-                HelpFormatter formatter = new HelpFormatter();
-                // use 'options' here to print help about all possible parameters
-                formatter.printHelp(MyRadioConsumerApplication.class.getName(), options, true);
-                System.exit(0);
-            }
-        } catch (ParseException e) {
-            // ignore, since any option except '-h' will cause this exception
-        }
-
-        try {
-            line = parser.parse(options, args);
-
-            if (line.hasOption('d')) {
-                providerDomain = line.getOptionValue('d');
-                LOG.info("found domain = " + providerDomain);
-            }
-            if (line.hasOption('H')) {
-                host = line.getOptionValue('H');
-                LOG.info("found host = " + host);
-            }
-            if (line.hasOption('l')) {
-                tmpDiscoveryScope = DiscoveryScope.LOCAL_ONLY;
-                LOG.info("found scope local");
-            }
-            if (line.hasOption('p')) {
-                port = Integer.parseInt(line.getOptionValue('p'));
-                LOG.info("found port = " + port);
-            }
-            if (line.hasOption('t')) {
-                transport = line.getOptionValue('t').toLowerCase();
-                LOG.info("found transport = " + transport);
-            }
-        } catch (ParseException e) {
-            LOG.error("failed to parse command line: " + e);
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp(MyRadioConsumerApplication.class.getName(), options, true);
-            System.exit(1);
-        }
+        String providerDomain = args[0];
 
         // joynr config properties are used to set joynr configuration at compile time. They are set on the
         // JoynInjectorFactory.
         Properties joynrConfig = new Properties();
-        Module runtimeModule = getRuntimeModule(transport, host, port, joynrConfig);
+        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_HOST, host);
+        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PORT, "" + port);
+        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PROTOCOL, "ws");
+        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PATH, "");
+        Module runtimeModule = new LibjoynrWebSocketRuntimeModule();
 
         LOG.debug("Using the following runtime module: " + runtimeModule.getClass().getSimpleName());
         LOG.debug("Searching for providers on domain \"{}\"", providerDomain);
@@ -215,73 +156,6 @@ public class MyRadioConsumerApplication extends AbstractJoynrApplication {
         myRadioConsumerApp.run();
 
         myRadioConsumerApp.shutdown();
-    }
-
-    private static void setupOptions(Options options, Options helpOptions) {
-        Option optionDomain = Option.builder("d")
-                .required(true)
-                .argName("domain")
-                .desc("the domain of the provider (required)")
-                .longOpt("domain")
-                .hasArg(true)
-                .numberOfArgs(1)
-                .type(String.class)
-                .build();
-        Option optionHost = Option.builder("H")
-                .required(false)
-                .argName("host")
-                .desc("the websocket host (optional, used in case of websocket transport, default: localhost)")
-                .longOpt("host")
-                .hasArg(true)
-                .numberOfArgs(1)
-                .type(String.class)
-                .build();
-        Option optionHelp = Option.builder("h")
-                .required(false)
-                .desc("print this message")
-                .longOpt("help")
-                .hasArg(false)
-                .build();
-        Option optionLocal = Option.builder("l")
-                .required(false)
-                .desc("optional, if present, the provider is discovered only locally")
-                .longOpt("local")
-                .hasArg(false)
-                .build();
-        Option optionPort = Option.builder("p")
-                .required(false)
-                .argName("port")
-                .desc("the websocket port (optional, used in case of websocket transport, default: 4242)")
-                .longOpt("port")
-                .hasArg(true)
-                .numberOfArgs(1)
-                .type(Number.class)
-                .build();
-        Option optionTransport = Option.builder("t")
-                .required(false)
-                .argName("transport")
-                .desc("the transport (optional, combination of websocket, http, mqtt with colon as separator, default: mqtt, any combination without websocket uses an embedded cluster controller)")
-                .longOpt("transport")
-                .hasArg(true)
-                .numberOfArgs(1)
-                .type(String.class)
-                .build();
-
-        options.addOption(optionDomain);
-        options.addOption(optionHelp);
-        options.addOption(optionHost);
-        options.addOption(optionLocal);
-        options.addOption(optionPort);
-        options.addOption(optionTransport);
-        helpOptions.addOption(optionHelp);
-    }
-
-    private static Module getRuntimeModule(String transport, String host, int port, Properties joynrConfig) {
-        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_HOST, host);
-        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PORT, "" + port);
-        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PROTOCOL, "ws");
-        joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PATH, "");
-        return new LibjoynrWebSocketRuntimeModule();
     }
 
     @Override
@@ -553,34 +427,15 @@ public class MyRadioConsumerApplication extends AbstractJoynrApplication {
                         + e.getClass().getSimpleName() + "!");
             }
 
-            ConsoleReader console;
-            try {
-                console = new ConsoleReader();
-                int key;
-                while ((key = console.readCharacter()) != 'q') {
-                    switch (key) {
-                        case 's':
-                            radioProxy.shuffleStations();
-                            LOG.info("called shuffleStations");
-                            break;
-                        case 'm':
-                            GetLocationOfCurrentStationReturned locationOfCurrentStation = radioProxy.getLocationOfCurrentStation();
-                            LOG.info("called getLocationOfCurrentStation. country: " + locationOfCurrentStation.country
-                                    + ", location: " + locationOfCurrentStation.location);
-                            break;
-                        default:
-                            LOG.info("\n\nUSAGE press\n" + " q\tto quit\n" + " s\tto shuffle stations\n");
-                            break;
-                    }
-                }
-            } catch (IOException e) {
-                LOG.error("error reading input from console", e);
-            }
+            LOG.info("Press enter to exit...");
+            System.in.read();
 
         } catch (DiscoveryException e) {
             LOG.error("No provider found", e);
         } catch (JoynrCommunicationException e) {
             LOG.error("The message was not sent: ", e);
+        } catch (IOException ex) {
+            LOG.error("Sys in err ", ex);
         }
     }
 }

@@ -31,23 +31,13 @@ import io.joynr.runtime.JoynrApplicationModule;
 import io.joynr.runtime.JoynrInjectorFactory;
 import io.joynr.runtime.LibjoynrWebSocketRuntimeModule;
 
-import java.io.IOException;
 import java.util.Properties;
 
-import jline.console.ConsoleReader;
 import joynr.infrastructure.DacTypes.MasterAccessControlEntry;
 import joynr.infrastructure.DacTypes.Permission;
 import joynr.infrastructure.DacTypes.TrustLevel;
 import joynr.types.ProviderScope;
 import joynr.types.ProviderQos;
-
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.ParseException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,71 +62,14 @@ public class MyRadioProviderApplication extends AbstractJoynrApplication {
     private ProviderScope providerScope;
 
     public static void main(String[] args) throws Exception {
-        // run application from cmd line using Maven:
-        // mvn exec:java -Dexec.mainClass="io.joynr.demo.MyRadioProviderApplication" -Dexec.args="<arguments>"
-        // where arguments provided as
-        // -d provider-domain [-h websocket-host] [-p websocket-port] [-t [(websocket | websocketCC):[http]:[mqtt]] [-l]
-
         ProviderScope tmpProviderScope = ProviderScope.GLOBAL;
         String host = "localhost";
         int port = 4242;
-        String localDomain = "domain";
-        String transport = null;
-
-        CommandLine line;
-        Options options = new Options();
-        Options helpOptions = new Options();
-        setupOptions(options, helpOptions);
-        CommandLineParser parser = new DefaultParser();
-
-        // check for '-h' option alone first. This is required in order to avoid
-        // reports about missing other args when using only '-h', which should supported
-        // to just get help / usage info.
-        try {
-            line = parser.parse(helpOptions, args);
-
-            if (line.hasOption('h')) {
-                HelpFormatter formatter = new HelpFormatter();
-                // use 'options' here to print help about all possible parameters
-                formatter.printHelp(MyRadioProviderApplication.class.getName(), options, true);
-                System.exit(0);
-            }
-        } catch (ParseException e) {
-            // ignore, since any option except '-h' will cause this exception
-        }
-
-        try {
-            line = parser.parse(options, args);
-
-            if (line.hasOption('d')) {
-                localDomain = line.getOptionValue('d');
-                LOG.info("found domain = " + localDomain);
-            }
-            if (line.hasOption('H')) {
-                host = line.getOptionValue('H');
-                LOG.info("found host = " + host);
-            }
-            if (line.hasOption('l')) {
-                tmpProviderScope = ProviderScope.LOCAL;
-                LOG.info("found scope local");
-            }
-            if (line.hasOption('p')) {
-                port = Integer.parseInt(line.getOptionValue('p'));
-                LOG.info("found port = " + port);
-            }
-            if (line.hasOption('t')) {
-                transport = line.getOptionValue('t').toLowerCase();
-                LOG.info("found transport = " + transport);
-            }
-        } catch (ParseException e) {
-            LOG.error("failed to parse command line: " + e);
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp(MyRadioProviderApplication.class.getName(), options, true);
-            System.exit(1);
-        }
+        String localDomain = args[0];
 
         Properties joynrConfig = new Properties();
-        Module runtimeModule = getRuntimeModule(transport, host, port, joynrConfig);
+        configureWebSocket(host, port, joynrConfig);
+        Module runtimeModule = new LibjoynrWebSocketRuntimeModule();
         final ProviderScope providerScope = tmpProviderScope;
         LOG.info("Using the following runtime module: " + runtimeModule.getClass().getSimpleName());
         LOG.info("Registering provider with the following scope: " + providerScope.name());
@@ -217,80 +150,11 @@ public class MyRadioProviderApplication extends AbstractJoynrApplication {
         joynrApplication.shutdown();
     }
 
-    private static void setupOptions(Options options, Options helpOptions) {
-        Option optionDomain = Option.builder("d")
-                                    .required(true)
-                                    .argName("domain")
-                                    .desc("the domain of the provider (required)")
-                                    .longOpt("domain")
-                                    .hasArg(true)
-                                    .numberOfArgs(1)
-                                    .type(String.class)
-                                    .build();
-        Option optionHost = Option.builder("H")
-                                  .required(false)
-                                  .argName("host")
-                                  .desc("the websocket host (optional, used in case of websocket transport, default: localhost)")
-                                  .longOpt("host")
-                                  .hasArg(true)
-                                  .numberOfArgs(1)
-                                  .type(String.class)
-                                  .build();
-        Option optionHelp = Option.builder("h")
-                                  .required(false)
-                                  .desc("print this message")
-                                  .longOpt("help")
-                                  .hasArg(false)
-                                  .build();
-        Option optionLocal = Option.builder("l")
-                                   .required(false)
-                                   .desc("optional, if present, the provider is registered only locally")
-                                   .longOpt("local")
-                                   .hasArg(false)
-                                   .build();
-        Option optionPort = Option.builder("p")
-                                  .required(false)
-                                  .argName("port")
-                                  .desc("the websocket port (optional, used in case of websocket transport, default: 4242)")
-                                  .longOpt("port")
-                                  .hasArg(true)
-                                  .numberOfArgs(1)
-                                  .type(Number.class)
-                                  .build();
-        Option optionTransport = Option.builder("t")
-                                       .required(false)
-                                       .argName("transport")
-                                       .desc("the transport (optional, combination of websocket, http, mqtt with colon as separator, default: mqtt, any combination without websocket uses an embedded cluster controller)")
-                                       .longOpt("transport")
-                                       .hasArg(true)
-                                       .numberOfArgs(1)
-                                       .type(String.class)
-                                       .build();
-
-        options.addOption(optionDomain);
-        options.addOption(optionHelp);
-        options.addOption(optionHost);
-        options.addOption(optionLocal);
-        options.addOption(optionPort);
-        options.addOption(optionTransport);
-        helpOptions.addOption(optionHelp);
-    }
-
-    private static Module getRuntimeModule(String transport, String host, int port, Properties joynrConfig) {
-        configureWebSocket(host, port, joynrConfig);
-        return new LibjoynrWebSocketRuntimeModule();
-    }
-
     private static void configureWebSocket(String host, int port, Properties joynrConfig) {
         joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_HOST, host);
         joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PORT, "" + port);
         joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PROTOCOL, "ws");
         joynrConfig.setProperty(WebsocketModule.PROPERTY_WEBSOCKET_MESSAGING_PATH, "");
-    }
-
-    private static void configureMqtt(Properties joynrConfig) {
-        joynrConfig.put("joynr.messaging.mqtt.brokerUri", "tcp://localhost:1883");
-        joynrConfig.put(MessagingPropertyKeys.PROPERTY_MESSAGING_PRIMARYGLOBALTRANSPORT, "mqtt");
     }
 
     @Override
@@ -302,36 +166,6 @@ public class MyRadioProviderApplication extends AbstractJoynrApplication {
         providerQos.setPriority(System.currentTimeMillis());
         providerQos.setScope(providerScope);
         runtime.registerProvider(localDomain, provider, providerQos);
-
-        ConsoleReader console;
-        try {
-            console = new ConsoleReader();
-            int key;
-            while ((key = console.readCharacter()) != 'q') {
-                switch (key) {
-                case 's':
-                    provider.shuffleStations();
-                    break;
-                case 'p':
-                    provider.fireWeakSignalEventWithPartition();
-                    break;
-                case 'w':
-                    provider.fireWeakSignalEvent();
-                    break;
-                case 'n':
-                    provider.fireNewStationDiscoveredEvent();
-                    break;
-                default:
-                    LOG.info("\n\nUSAGE press\n" + " q\tto quit\n" + " s\tto shuffle stations\n"
-                            + " w\tto fire weak signal event\n"
-                            + " p\tto fire weak signal event with country of current station as partition\n"
-                            + " n\tto fire station discovered event\n");
-                    break;
-                }
-            }
-        } catch (IOException e) {
-            LOG.error("error reading input from console", e);
-        }
     }
 
     @Override
